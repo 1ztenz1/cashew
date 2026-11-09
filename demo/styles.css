@@ -301,7 +301,7 @@ td.small.muted{min-width:230px}
 .tabbar{display:none}
 .side-mobile-only{display:none}
 .tabbar svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.tabbar svg circle{fill:currentColor;stroke:none}
+.tabbar a:last-child svg circle{fill:currentColor;stroke:none}
 .tabbar a:last-child svg circle{fill:currentColor}
 
 @media (max-width:820px){
@@ -435,3 +435,4 @@ td.small.muted{min-width:230px}
 @media (max-width:820px){.modal-card .card .row>select:last-child{flex:1 1 100%}}
 @media (max-width:820px){.tour{left:12px;right:12px;width:auto;transform:none}.tour .row{flex-wrap:wrap}}
 @media (max-width:820px){#facFilter{max-width:104px}.top-r{flex:none}.ttl{min-width:0;flex:1}.top h1{overflow:hidden;text-overflow:ellipsis}}
+@media (max-width:820px){.tabbar a svg,.tabbar a.on svg{box-sizing:content-box;width:22px;height:22px;padding:3px 14px;border-radius:20px}.tabbar a.on svg{background:var(--brand-soft)}}
