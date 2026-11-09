@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CashewIQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>try{const t=localStorage.getItem('ciq-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+
+<!-- LOGIN -->
+<section id="login" class="login">
+  <div class="login-hero">
+    <div class="brand big"><span class="logo"><svg viewBox="0 0 24 24"><path d="M16.5 3.5c-4 0-7 2.2-8.4 5.6-.6 1.5-1.9 2.4-3.4 2.6C3.4 12 2.5 13.2 2.6 14.6c.3 3.4 3.5 5.9 7.4 5.9 6.3 0 11.4-5.1 11.4-11.4 0-3.1-2-5.6-4.9-5.6Z"/></svg></span><div><b>CashewIQ</b><small>Processing intelligence</small></div></div>
+    <h2>From raw nut to export container — in one traceable flow.</h2>
+    <ul class="hero-list">
+      <li><span>01</span>Shipments, raw batches &amp; factory allocation</li>
+      <li><span>02</span>Production, grade-wise output &amp; recovery</li>
+      <li><span>03</span>Quality release, inventory ledger &amp; orders</li>
+      <li><span>04</span>Packing, dispatch, traceability &amp; reports</li>
+    </ul>
+    <div class="hero-stats"><div><b>7</b><small>Factories</small></div><div><b>2</b><small>Packing centres</small></div><div><b>19</b><small>Grades</small></div><div><b>6</b><small>Raw nut origins</small></div></div>
+  </div>
+  <div class="login-side">
+    <button class="icon-btn theme-btn login-theme" onclick="Theme.toggle()" title="Toggle theme"></button>
+    <div class="login-card">
+      <h1>Welcome back</h1>
+      <p class="muted">Sign in to continue to your workspace.</p>
+      <label>Email<input value="demo@cashewiq.app"></label>
+      <label>Password<input type="password" value="demodemo"></label>
+      <label>Role
+        <select id="roleSel">
+          <option>Managing Director</option><option>Factory Manager</option><option>Production Supervisor</option>
+          <option>Quality Inspector</option><option>Inventory Manager</option><option>Sales / Export Manager</option><option>Auditor</option>
+        </select>
+      </label>
+      <button class="btn primary wide" onclick="App.login()">Sign in</button>
+      <p class="muted small center">Each role sees a different scope of the system.</p>
+    </div>
+  </div>
+</section>
+
+<!-- APP -->
+<div id="app" class="shell hidden">
+  <aside class="side">
+    <div class="brand"><span class="logo"><svg viewBox="0 0 24 24"><path d="M16.5 3.5c-4 0-7 2.2-8.4 5.6-.6 1.5-1.9 2.4-3.4 2.6C3.4 12 2.5 13.2 2.6 14.6c.3 3.4 3.5 5.9 7.4 5.9 6.3 0 11.4-5.1 11.4-11.4 0-3.1-2-5.6-4.9-5.6Z"/></svg></span><div><b>CashewIQ</b><small>Operations workspace</small></div></div>
+    <nav id="nav"></nav>
+    <div class="side-foot"><div id="whoami" class="who"></div><button class="btn ghost sm" onclick="App.reset()">↺ Reset data</button></div>
+  </aside>
+  <div class="scrim" onclick="document.body.classList.remove('nav-open')"></div>
+  <main>
+    <header class="top">
+      <button class="icon-btn menu" onclick="document.body.classList.toggle('nav-open')" title="Menu">☰</button>
+      <div class="ttl"><span id="crumb" class="crumb"></span><h1 id="title">Dashboard</h1></div>
+      <div class="top-r">
+        <select id="facFilter" class="sel-sm" onchange="App.render()"></select>
+        <button class="icon-btn theme-btn" onclick="Theme.toggle()" title="Toggle light / dark"></button>
+        <button class="btn primary sm" onclick="Tour.start()" title="Guided tour">▶<span class="lg"> Guided tour</span></button>
+      </div>
+    </header>
+    <div id="journey" class="journey"></div>
+    <div id="view" class="view"></div>
+  </main>
+</div>
+
+<div id="modal" class="modal hidden"><div class="modal-card"><button class="icon-btn modal-x" onclick="closeModal()" title="Close">✕</button><div id="modalBody"></div></div></div>
+<div id="tour" class="tour hidden"></div>
+<div id="toasts"></div>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
