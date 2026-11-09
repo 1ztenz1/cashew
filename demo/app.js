@@ -295,6 +295,8 @@ const App = {
     const grp = NAV.find(x => x[1].some(y => y[0] === App.route)); const item = grp && grp[1].find(x => x[0] === App.route); $('#title').textContent = item ? item[1] : ''; $('#crumb').textContent = grp ? grp[0] : '';
     renderJourney();
     $('#view').innerHTML = V[App.route]();
+    labelTables($('#view')); renderTabbar();
+    const jc = document.querySelector('#journey .st.cur'); if (jc && window.innerWidth < 820) jc.scrollIntoView({block: 'nearest', inline: 'center'});
     if (V[App.route + '_after']) V[App.route + '_after']();
   }
 };
@@ -318,8 +320,21 @@ function act(fn) {
   if (App.ro()) { toast('Auditor role is read-only — no create/update/delete permissions', 'warn'); return; }
   try { const r = fn(); App.render(); return r; } catch (e) { if (e instanceof BizError) { toast('⛔ ' + e.message, 'bad'); } else { console.error(e); toast('Error: ' + e.message, 'bad'); } }
 }
-function modal(html) { $('#modalBody').innerHTML = html; $('#modal').classList.remove('hidden'); }
-function closeModal() { $('#modal').classList.add('hidden'); }
+function modal(html) { $('#modalBody').innerHTML = html; labelTables($('#modalBody')); $('#modal').classList.remove('hidden'); document.body.classList.add('modal-open'); }
+/* mobile: give every cell its column name so tables can reflow into cards */
+function labelTables(el) {
+  el.querySelectorAll('table').forEach(t => {
+    const hs = [...t.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    t.querySelectorAll('tbody tr').forEach(tr => [...tr.children].forEach((td, i) => { if (hs[i]) td.dataset.label = hs[i]; else td.classList.add('nolabel'); if (!td.textContent.trim() && !td.querySelector('button,input,select')) td.classList.add('blank'); }));
+  });
+}
+const TABS = [['dashboard', 'Home'], ['production', 'Production'], ['quality', 'Quality'], ['orders', 'Orders']];
+function renderTabbar() {
+  const inTabs = TABS.some(t => t[0] === App.route);
+  $('#tabbar').innerHTML = TABS.map(([id, t]) => `<a href="#" class="${App.route === id ? 'on' : ''}" onclick="App.go('${id}');return false">${svg(id)}<span>${t}</span>${badge(id)}</a>`).join('') +
+    `<a href="#" class="${inTabs ? '' : 'on'}" onclick="document.body.classList.toggle('nav-open');return false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>More</span></a>`;
+}
+function closeModal() { $('#modal').classList.add('hidden'); document.body.classList.remove('modal-open'); }
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 const pill = s => { const c = {PASS: 'ok', Released: 'ok', Posted: 'ok', Dispatched: 'ok', Received: 'ok', Active: 'ok', Accepted: 'ok', HOLD: 'warn', Pending: 'info', Draft: 'info', Confirmed: 'brand', 'Partly reserved': 'warn', Reserved: 'brand', Packed: 'brand', REJECT: 'bad', Arrived: 'warn', Maintenance: 'warn', Open: 'info', Consumed: '', Incomplete: 'warn', Complete: 'ok', flag: 'warn', ok: 'ok'}[s] ?? ''; return `<span class="pill ${c}">${esc(s === 'flag' ? 'Needs validation' : s === 'ok' ? 'Validated' : s)}</span>`; };
 const table = (heads, rows, empty = 'No records') => `<div class="tbl-wrap"><table><thead><tr>${heads.map(h => `<th class="${h.endsWith('#') ? 'num' : ''}">${h.replace(/#$/, '')}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.join('') : `<tr><td colspan="${heads.length}" class="empty">${empty}</td></tr>`}</tbody></table></div>`;
