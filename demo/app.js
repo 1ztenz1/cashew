@@ -283,24 +283,31 @@ const App = {
   user() { return M.people[App.role] || 'User'; },
   ro() { return App.role === 'Auditor'; },
   confirmLogout() {
+    Acct.close(); document.body.classList.remove('nav-open');
     const u = App.user(), ini = u.split(' ').slice(0, 2).map(x => x[0]).join('');
-    modal(`<div class="signout"><div class="so-ic"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></div>
-    <h2>Sign out of CashewIQ?</h2><p class="muted">You'll return to the sign-in screen. Data you entered in this session stays until you reset it or close the tab.</p>
+    modal(`<div class="confirm"><div class="cf-ic bad"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></div>
+    <h2>Sign out?</h2><p class="muted">You'll be returned to the sign-in screen.</p>
     <div class="so-user"><span class="av">${esc(ini)}</span><div><b>${esc(u)}</b><span>${esc(App.role)}</span></div></div>
-    <div class="modal-foot"><button class="btn" onclick="closeModal()">Stay signed in</button><button class="btn bad" onclick="App.logout()">Sign out</button></div></div>`);
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn bad" id="soGo" onclick="App.logout()">Sign out</button></div></div>`);
+    setTimeout(() => { const b = $('#soGo'); if (b) b.focus(); }, 50);
   },
   logout() {
-    closeModal(); Tour.end(); document.body.classList.remove('nav-open');
-    $('#app').classList.add('hidden'); $('#login').classList.remove('hidden'); window.scrollTo(0, 0);
-    toast('Signed out successfully', 'ok');
+    closeModal(); Acct.close(); Tour.end(); document.body.classList.remove('nav-open');
+    $('#app').classList.add('hidden'); $('#login').classList.remove('hidden');
+    App.route = 'dashboard'; App.sub = {}; App.role = null; window.scrollTo(0, 0);
+    toast('You have been signed out', 'ok');
   },
   login() { App.role = $('#roleSel').value; $('#login').classList.add('hidden'); $('#app').classList.remove('hidden'); App.go('dashboard'); },
-  reset() { if (confirm('Reset all data to the starting point?')) { seed(); App.sub = {}; App.go('dashboard'); toast('Data reset to starting point', 'ok'); } },
+  reset() {
+    Acct.close(); document.body.classList.remove('nav-open');
+    modal(`<div class="confirm"><div class="cf-ic warn"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></div><h2>Reset all data?</h2><p class="muted">Every record goes back to the starting sample data. Anything entered in this session is cleared.</p>
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn warn" onclick="closeModal();seed();App.sub={};App.go('dashboard');toast('Data reset to starting point','ok')">Reset data</button></div></div>`);
+  },
   go(r, sub) { App.route = r; if (sub) App.sub[r] = sub; document.body.classList.remove('nav-open'); App.render(); window.scrollTo(0, 0); },
   fac() { return App.role === 'Factory Manager' ? 'F01' : ($('#facFilter').value || ''); },
   render() {
     $('#nav').innerHTML = NAV.map(([g, items]) => `<div class="grp">${g}</div>` + items.map(([id, t]) => `<a href="#" class="${App.route === id ? 'on' : ''}" onclick="App.go('${id}');return false">${svg(id)}${t}${badge(id)}</a>`).join('')).join('');
-    $('#whoami').innerHTML = `<span class="av">${esc(App.user().split(' ').slice(0, 2).map(x => x[0]).join(''))}</span><div><b>${esc(App.user().replace('', ''))}</b><span>${esc(App.role)}${App.ro() ? ' · read-only' : ''}</span></div>`;
+    $('#whoami').innerHTML = `<span class="av">${esc(App.user().split(' ').slice(0, 2).map(x => x[0]).join(''))}</span><span class="who-t"><b>${esc(App.user())}</b><small>${esc(App.role)}${App.ro() ? ' · read-only' : ''}</small></span>`;
     const ff = $('#facFilter'); const cur = ff.value;
     ff.innerHTML = (App.role === 'Factory Manager' ? '' : '<option value="">All factories</option>') + M.factories.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
     ff.value = App.role === 'Factory Manager' ? 'F01' : cur; ff.disabled = App.role === 'Factory Manager';
@@ -886,6 +893,27 @@ V.costing = () => {
       <div class="sec">Processing & by-product</div><div class="pricegrid"><label>Labour / kg<input type="number" step="0.01" value="${M.costing.labour}" onchange="M.costing.labour=+this.value;App.render()"></label><label>Overhead / kg<input type="number" step="0.01" value="${M.costing.overhead}" onchange="M.costing.overhead=+this.value;App.render()"></label><label>Shell credit / kg<input type="number" step="0.01" value="${M.costing.shellCredit}" onchange="M.costing.shellCredit=+this.value;App.render()"></label></div></div>
   </div>`;
 };
+
+/* Account menu */
+const Acct = {
+  open: false,
+  toggle(e) { e && e.stopPropagation(); Acct.open ? Acct.close() : Acct.show(); },
+  show() {
+    const u = App.user(), ini = u.split(' ').slice(0, 2).map(x => x[0]).join('');
+    const it = (ic, t, fn, cls = '') => `<button class="am-item ${cls}" role="menuitem" onclick="${fn}"><svg viewBox="0 0 24 24">${ic}</svg><span>${t}</span></button>`;
+    $('#acctMenu').innerHTML = `<div class="am-head"><span class="av">${esc(ini)}</span><div><b>${esc(u)}</b><small>${esc(App.role)}</small></div></div>
+      ${it('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>', Theme.cur() === 'dark' ? 'Light mode' : 'Dark mode', 'Theme.toggle();Acct.close()')}
+      ${it('<circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20c1 0 1.7-.8 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-1 .8-1.7 1.7-1.7H16a6 6 0 0 0 6-6C22 6 17.5 2 12 2Z"/>', 'Appearance', "Acct.close();document.body.classList.remove('nav-open');App.sub.setTab='appearance';App.go('settings')")}
+      ${it('<polygon points="6 4 20 12 6 20 6 4"/>', 'Guided tour', "Acct.close();document.body.classList.remove('nav-open');Tour.start()")}
+      ${it('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>', 'Reset data', 'App.reset()')}
+      <div class="am-sep"></div>
+      ${it('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>', 'Sign out', 'App.confirmLogout()', 'danger')}`;
+    $('#acctMenu').classList.remove('hidden'); $('#acctBtn').classList.add('on'); Acct.open = true;
+  },
+  close() { const m = $('#acctMenu'); if (m) m.classList.add('hidden'); const b = $('#acctBtn'); if (b) b.classList.remove('on'); Acct.open = false; }
+};
+document.addEventListener('click', e => { if (Acct.open && !e.target.closest('#acctMenu')) Acct.close(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (Acct.open) Acct.close(); else if (!$('#modal').classList.contains('hidden')) closeModal(); } });
 
 /* ============================ GUIDED TOUR ============================ */
 const Tour = {

@@ -18,6 +18,7 @@
   <div class="login-hero">
     <div class="brand big"><span class="logo"><svg viewBox="0 0 24 24"><path d="M16.5 3.5c-4 0-7 2.2-8.4 5.6-.6 1.5-1.9 2.4-3.4 2.6C3.4 12 2.5 13.2 2.6 14.6c.3 3.4 3.5 5.9 7.4 5.9 6.3 0 11.4-5.1 11.4-11.4 0-3.1-2-5.6-4.9-5.6Z"/></svg></span><div><b>CashewIQ</b><small>Processing intelligence</small></div></div>
     <h2>From raw nut to export container — in one traceable flow.</h2>
+    <p class="hero-tag">Processing · Grading · Quality · Export</p>
     <ul class="hero-list">
       <li><span>01</span>Shipments, raw batches &amp; factory allocation</li>
       <li><span>02</span>Production, grade-wise output &amp; recovery</li>
@@ -29,8 +30,8 @@
   <div class="login-side">
     <button class="icon-btn theme-btn login-theme" onclick="Theme.toggle()" title="Toggle theme"></button>
     <div class="login-card">
-      <h1>Welcome back</h1>
-      <p class="muted">Sign in to continue to your workspace.</p>
+      <h1>Sign in</h1>
+      <p class="muted">Welcome back to your workspace.</p>
       <label>Email<input value="demo@cashewiq.app"></label>
       <label>Password<input type="password" value="demodemo"></label>
       <label>Role
@@ -40,7 +41,7 @@
         </select>
       </label>
       <button class="btn primary wide" onclick="App.login()">Sign in</button>
-      <p class="muted small center">Each role sees a different scope of the system.</p>
+      
     </div>
   </div>
 </section>
@@ -50,7 +51,10 @@
   <aside class="side">
     <div class="brand"><span class="logo"><svg viewBox="0 0 24 24"><path d="M16.5 3.5c-4 0-7 2.2-8.4 5.6-.6 1.5-1.9 2.4-3.4 2.6C3.4 12 2.5 13.2 2.6 14.6c.3 3.4 3.5 5.9 7.4 5.9 6.3 0 11.4-5.1 11.4-11.4 0-3.1-2-5.6-4.9-5.6Z"/></svg></span><div><b>CashewIQ</b><small>Operations workspace</small></div></div>
     <nav id="nav"></nav>
-    <div class="side-foot"><div class="side-mobile-only"><button class="btn sm" onclick="Theme.toggle()">◐ Theme</button><button class="btn sm" onclick="document.body.classList.remove('nav-open');Tour.start()">▶ Tour</button></div><div class="who-row"><div id="whoami" class="who"></div><button class="icon-btn signout-btn" onclick="App.confirmLogout()" title="Sign out" aria-label="Sign out"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button></div><button class="btn ghost sm" onclick="App.reset()">↺ Reset data</button></div>
+    <div class="side-foot">
+      <div id="acctMenu" class="acct-menu hidden" role="menu"></div>
+      <button id="acctBtn" class="acct" onclick="Acct.toggle(event)" aria-haspopup="menu"><span id="whoami" class="who"></span><svg class="chev" viewBox="0 0 24 24"><path d="m7 15 5-5 5 5"/></svg></button>
+    </div>
   </aside>
   <div class="scrim" onclick="document.body.classList.remove('nav-open')"></div>
   <main>
