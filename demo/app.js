@@ -282,6 +282,18 @@ const App = {
   route: 'dashboard', role: null, sub: {},
   user() { return M.people[App.role] || 'User'; },
   ro() { return App.role === 'Auditor'; },
+  confirmLogout() {
+    const u = App.user(), ini = u.split(' ').slice(0, 2).map(x => x[0]).join('');
+    modal(`<div class="signout"><div class="so-ic"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></div>
+    <h2>Sign out of CashewIQ?</h2><p class="muted">You'll return to the sign-in screen. Data you entered in this session stays until you reset it or close the tab.</p>
+    <div class="so-user"><span class="av">${esc(ini)}</span><div><b>${esc(u)}</b><span>${esc(App.role)}</span></div></div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Stay signed in</button><button class="btn bad" onclick="App.logout()">Sign out</button></div></div>`);
+  },
+  logout() {
+    closeModal(); Tour.end(); document.body.classList.remove('nav-open');
+    $('#app').classList.add('hidden'); $('#login').classList.remove('hidden'); window.scrollTo(0, 0);
+    toast('Signed out successfully', 'ok');
+  },
   login() { App.role = $('#roleSel').value; $('#login').classList.add('hidden'); $('#app').classList.remove('hidden'); App.go('dashboard'); },
   reset() { if (confirm('Reset all data to the starting point?')) { seed(); App.sub = {}; App.go('dashboard'); toast('Data reset to starting point', 'ok'); } },
   go(r, sub) { App.route = r; if (sub) App.sub[r] = sub; document.body.classList.remove('nav-open'); App.render(); window.scrollTo(0, 0); },
@@ -840,7 +852,7 @@ function csvImport(inp) {
 
 /* Appearance: accent colour themes */
 const ACCENTS = [['amber', '#d97706'], ['teal', '#0d9488'], ['indigo', '#4f46e5'], ['ocean', '#0284c7'], ['emerald', '#059669'], ['rose', '#e11d48'], ['slate', '#475569']];
-const Accent = { cur() { return document.documentElement.dataset.accent || 'amber'; }, set(a) { if (a === 'amber') delete document.documentElement.dataset.accent; else document.documentElement.dataset.accent = a; try { localStorage.setItem('ciq-accent', a); } catch (e) {} App.render(); } };
+const Accent = { cur() { return document.documentElement.dataset.accent || 'teal'; }, set(a) { document.documentElement.dataset.accent = a; try { localStorage.setItem('ciq-accent', a); } catch (e) {} App.render(); } };
 function appearanceHtml() {
   return `<div class="grid g2"><div><h3>Mode</h3><div class="chipset"><span class="chip ${Theme.cur() === 'light' ? 'on' : ''}" style="cursor:pointer" onclick="if(Theme.cur()!=='light')Theme.toggle();App.render()">☀ Light</span><span class="chip ${Theme.cur() === 'dark' ? 'on' : ''}" style="cursor:pointer" onclick="if(Theme.cur()!=='dark')Theme.toggle();App.render()">☾ Dark</span></div></div>
   <div><h3>Accent colour</h3><div class="swatches">${ACCENTS.map(([k, c]) => `<button class="swatch ${Accent.cur() === k ? 'on' : ''}" style="--sw:${c}" onclick="Accent.set('${k}')"><i></i>${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div><p class="spec">Every colour in the app follows the selected accent, in light and dark mode.</p></div></div>`;
