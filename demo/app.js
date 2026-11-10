@@ -42,7 +42,7 @@ const E = {
     const id = batchCode || nextId('RCN-DEMO-');
     if (S.batches.some(b => b.id === id)) fail('Duplicate posting blocked: batch ' + id + ' already exists');
     S.receipts.push({id: grId, ship: shipRef, qty, date: clock, loc});
-    const b = {id, ship: shipRef, gr: grId, supplier: sh.supplier, origin: sh.origin, date: clock, original: qty, loc, qstatus: 'Accepted'};
+    const b = {id, ship: shipRef, gr: grId, supplier: sh.supplier, origin: sh.origin, date: clock, original: qty, loc, qstatus: 'Accepted', price: (M.costing && M.costing.rcn[sh.origin]) || 1.45};
     S.batches.push(b);
     S.batchMoves.push({batch: id, type: 'RECEIPT', qty, ref: grId, ts: clock});
     sh.status = 'Received';
@@ -270,7 +270,7 @@ const NAV = [
   ['Raw material', [['shipments', 'Suppliers & shipments'], ['batches', 'Raw batches']]],
   ['Processing', [['production', 'Production'], ['grades', 'Grade master'], ['quality', 'Quality control']]],
   ['Stock & sales', [['inventory', 'Inventory'], ['orders', 'Orders'], ['packing', 'Packing'], ['dispatch', 'Dispatch']]],
-  ['Intelligence', [['trace', 'Traceability'], ['reports', 'Reports'], ['settings', 'Company & settings']]]
+  ['Intelligence', [['trace', 'Traceability'], ['costing', 'Costing & margin'], ['reports', 'Reports'], ['settings', 'Company & settings']]]
 ];
 const Theme = {
   cur() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; },
@@ -383,7 +383,7 @@ V.dashboard = () => {
     ${kpi('Raw received', kg(m.raw), S.batches.length + ' raw batches', 'accent', 'batches')}
     ${kpi('Raw consumed', kg(m.cons), m.runs.length + ' posted runs', 'accent', 'production')}
     ${kpi('Kernel output', kg(m.kern), 'all grades', 'accent', 'scale')}
-    ${kpi('Kernel recovery', pct(m.rec), 'Σ kernel ÷ Σ raw input', 'accent', 'percent')}
+    ${kpi('Kernel recovery', pct(m.rec), m.cons ? 'KOR ' + (m.kern * 2.20462 / (m.cons / 80)).toFixed(1) + ' lbs / 80 kg bag' : '—', 'accent', 'percent')}
     ${kpi('Finished stock', kg(m.stock), kg(m.avail) + ' available to promise', '', 'inventory')}
     ${kpi('Quality hold', kg(m.hold), kg(m.pending) + ' pending inspection', '', 'quality')}
     ${kpi('Open orders', m.openOrders, S.orders.length + ' orders total', '', 'orders')}
@@ -460,7 +460,7 @@ V.batches = () => `
   <div class="card"><h3>Raw-material batches</h3>
   ${table(['Batch', 'Shipment', 'Supplier', 'Origin', 'Receipt', 'Location', 'Original#', 'Allocated#', 'Unallocated#', 'Consumed#', 'Quality', ''], S.batches.slice().reverse().map(b => {
     const x = E.batchBal(b.id);
-    return `<tr><td class="mono"><b>${b.id}</b></td><td class="mono">${b.ship}</td><td>${M.suppliers.find(s => s.id === b.supplier).name}</td><td>${b.origin}</td><td>${fmtDate(b.date)}</td><td>${b.loc}</td><td class="num">${kg(b.original)}</td><td class="num">${kg(x.allocated)}</td><td class="num"><b>${kg(x.unallocated)}</b></td><td class="num">${kg(x.consumed)}</td><td>${pill(b.qstatus)}</td><td class="row">${B('Allocate', `allocModal('${b.id}')`, 'sm primary')}<button class="btn sm" onclick="App.go('trace','batch:${b.id}')">Trace</button></td></tr>`;
+    return `<tr><td class="mono"><b>${b.id}</b></td><td class="mono">${b.ship}</td><td>${M.suppliers.find(s => s.id === b.supplier).name}</td><td>${b.origin}</td><td>${fmtDate(b.date)}</td><td>${b.loc}</td><td class="num">${kg(b.original)}</td><td class="num">${kg(x.allocated)}</td><td class="num"><b>${kg(x.unallocated)}</b></td><td class="num">${kg(x.consumed)}</td><td>${pill(b.qstatus)}</td><td class="row">${B('Allocate', `allocModal('${b.id}')`, 'sm primary')}<button class="btn sm" onclick="batchLedger('${b.id}')">Ledger</button><button class="btn sm" onclick="App.go('trace','batch:${b.id}')">Trace</button></td></tr>`;
   }))}</div>
   <div class="card"><h3>Factory allocations & movement history</h3>
   ${table(['Allocation', 'Date', 'Batch', 'Factory', 'Allocated#', 'Consumed#', 'Remaining#', 'Status'], S.allocations.filter(a => facOk(a.fac)).slice().reverse().map(a => `<tr><td class="mono">${a.id}</td><td>${fmtDate(a.date)}</td><td class="mono">${a.batch}</td><td>${fName(a.fac)}</td><td class="num">${kg(a.qty)}</td><td class="num">${kg(a.consumed)}</td><td class="num">${kg(a.qty - a.consumed)}</td><td>${pill(a.status)}</td></tr>`))}</div>`;
@@ -477,11 +477,11 @@ function allocModal(id, preset) {
 function alChk(u) { const q = +$('#alQty').value; $('#alMsg').innerHTML = q > u ? `<div class="alert bad">⛔ ${kg(q)} exceeds unallocated ${kg(u)} — the system will block this allocation.</div>` : `<div class="alert ok">Remaining after allocation: <b>${kg(u - q)}</b></div>`; }
 
 function runTable(runs) {
-  return table(['Run', 'Date', 'Factory', 'Shift', 'Raw input#', 'Kernel#', 'Recovery#', 'Mass balance', 'Status', ''], runs.slice().reverse().map(r => { const c = E.calc(r); return `<tr class="click" onclick="runDetail('${r.id}')"><td class="mono"><b>${r.id}</b></td><td>${fmtDate(r.date)}</td><td>${fName(r.fac)}</td><td>${r.shift}</td><td class="num">${kg(c.input)}</td><td class="num">${kg(c.kernel)}</td><td class="num"><b>${pct(c.recovery)}</b></td><td>${pill(c.complete ? 'Complete' : 'Incomplete')}</td><td>${pill(r.status)}</td><td>${r.status === 'Draft' ? B('Post', `event.stopPropagation();postRunUI('${r.id}')`, 'sm primary') : ''}</td></tr>`; }));
+  return table(['Run', 'Date', 'Factory', 'Shift', 'Raw input#', 'Kernel#', 'Recovery#', 'Mass balance', 'Status', ''], runs.slice().reverse().map(r => { const c = E.calc(r); return `<tr class="click" onclick="runDetail('${r.id}')"><td class="mono"><b>${r.id}</b></td><td>${fmtDate(r.date)}</td><td>${fName(r.fac)}</td><td>${r.shift}</td><td class="num">${kg(c.input)}</td><td class="num">${kg(c.kernel)}</td><td class="num"><b>${pct(c.recovery)}</b></td><td>${pill(c.complete ? 'Complete' : 'Incomplete')}</td><td>${pill(r.status)} ${r.status === 'Draft' ? checkPill(r) : ''}</td><td>${r.status === 'Draft' ? B('Post', `event.stopPropagation();postRunUI('${r.id}')`, 'sm primary') : ''}</td></tr>`; }));
 }
 V.production = () => {
   const runs = S.runs.filter(r => facOk(r.fac));
-  return `<div class="row"><div class="formula">Kernel recovery % = Σ kernel output kg ÷ Σ raw input kg × 100 &nbsp;·&nbsp; Mass-balance variance = raw input − all recorded outputs</div><span class="spacer"></span>${B('+ New production run', 'runForm()', 'primary')}</div>
+  return `<div class="row"><div class="formula">Kernel recovery % = Σ kernel output kg ÷ Σ raw input kg × 100 &nbsp;·&nbsp; Mass-balance variance = raw input − all recorded outputs</div><span class="spacer"></span><button class="btn" onclick="rulesModal()">ⓘ Rules</button>${B('+ New production run', 'runForm()', 'primary')}</div>
   <div class="card"><h3>Production runs</h3>${runTable(runs)}</div>`;
 };
 let draft;
@@ -504,7 +504,7 @@ function drawRunForm() {
   <button class="btn sm ghost" onclick="draft.cons.push({batch:'',qty:0});drawRunForm()">+ Add batch</button>
   <div class="grid g2" style="margin-top:14px"><div><h3 style="margin:0 0 6px">Grade-wise kernel output</h3>
   ${d.outputs.map((o, i) => `<div class="row" style="margin-bottom:5px"><select onchange="draft.outputs[${i}].grade=this.value">${M.grades.map(g => `<option value="${g.id}" ${g.id === o.grade ? 'selected' : ''}>${g.id} — ${g.name}</option>`)}</select><input type="number" style="width:90px" value="${o.qty || ''}" placeholder="kg" oninput="draft.outputs[${i}].qty=+this.value;runLive()"></div>`).join('')}
-  <button class="btn sm ghost" onclick="draft.outputs.push({grade:'W-240',qty:0});drawRunForm()">+ Add grade</button></div>
+  <div class="row"><button class="btn sm ghost" onclick="draft.outputs.push({grade:'W-240',qty:0});drawRunForm()">+ Add grade</button><button class="btn sm ghost" onclick="$('#csvIn').click()">⇪ Import CSV</button><button class="btn sm ghost" onclick="csvTemplate()">⇩ Template</button><input type="file" id="csvIn" accept=".csv,.txt" hidden onchange="csvImport(this)"></div></div>
   <div><h3 style="margin:0 0 6px">Other output streams</h3>
   ${d.other.map((o, i) => `<div class="row" style="margin-bottom:5px"><select onchange="draft.other[${i}].type=this.value;runLive()">${M.outputTypes.map(t => `<option value="${t.id}" ${t.id === o.type ? 'selected' : ''}>${t.name}${t.required ? ' *' : ''}</option>`)}</select><input type="number" style="width:90px" value="${o.qty || ''}" placeholder="kg" oninput="draft.other[${i}].qty=+this.value;runLive()"></div>`).join('')}
   <button class="btn sm ghost" onclick="draft.other.push({type:'REJ',qty:0});drawRunForm()">+ Add stream</button></div></div>
@@ -514,8 +514,9 @@ function drawRunForm() {
 }
 function runLive() {
   const c = E.calc(draft);
-  $('#runLive').innerHTML = `<div class="grid g4">${kpi('Raw input', kg(c.input))}${kpi('Kernel output', kg(c.kernel))}${kpi('Kernel recovery', pct(c.recovery), c.input ? `${c.kernel.toLocaleString()} ÷ ${c.input.toLocaleString()} × 100` : 'zero input — not calculated')}${kpi('Mass-balance variance', kg(c.variance), c.input ? (c.variance / c.input * 100).toFixed(2) + '% of input unaccounted' : '')}</div>
-  ${c.complete ? '<div class="alert ok" style="margin-top:8px">✓ Required output streams recorded — mass balance complete</div>' : `<div class="alert warn" style="margin-top:8px">⚠ Mass balance INCOMPLETE — not recorded: ${c.missing.join(', ')}. Variance is not treated as wastage.</div>`}`;
+  $('#runLive').innerHTML = `<div class="grid g4">${kpi('Raw input', kg(c.input))}${kpi('Kernel output', kg(c.kernel))}${kpi('Kernel recovery', pct(c.recovery), c.input ? `KOR ${(c.kernel * 2.20462 / (c.input / 80)).toFixed(1)} lbs / 80 kg bag` : 'zero input — not calculated')}${kpi('Mass-balance variance', kg(c.variance), c.input ? (c.variance / c.input * 100).toFixed(2) + '% of input unaccounted' : '')}</div>
+  ${c.complete ? '<div class="alert ok" style="margin-top:8px">✓ Required output streams recorded — mass balance complete</div>' : `<div class="alert warn" style="margin-top:8px">⚠ Mass balance INCOMPLETE — not recorded: ${c.missing.join(', ')}. Variance is not treated as wastage.</div>`}
+  ${checksHtml(draft)}`;
 }
 function saveRunUI(post) {
   act(() => {
@@ -530,11 +531,11 @@ function runDetail(id) {
   const r = S.runs.find(x => x.id === id); const c = E.calc(r);
   modal(`<h2>${r.id} ${pill(r.status)}</h2><p class="muted">${fName(r.fac)} · ${fmtDate(r.date)} · ${r.shift} shift · ${esc(r.line)} · Supervisor ${esc(r.supervisor)}</p>
   <div class="grid g4">${kpi('Raw input', kg(c.input))}${kpi('Kernel', kg(c.kernel))}${kpi('Recovery', pct(c.recovery))}${kpi('Variance', kg(c.variance), c.complete ? 'complete' : 'INCOMPLETE')}</div>
-  <div class="formula" style="margin:10px 0">${c.kernel.toLocaleString()} kg ÷ ${c.input.toLocaleString()} kg × 100 = ${pct(c.recovery)}</div>
+  <div class="formula" style="margin:10px 0">Recovery ${c.kernel.toLocaleString()} kg ÷ ${c.input.toLocaleString()} kg × 100 = ${pct(c.recovery)} · KOR ${(c.kernel * 2.20462 / (c.input / 80)).toFixed(1)} lbs per 80 kg bag</div>${r.status === 'Draft' ? checksHtml(r) : ''}
   <div class="grid g2"><div><h3>Grade outputs</h3>${bars(r.outputs.map(o => [o.grade, +o.qty, gName(o.grade)]))}</div>
   <div><h3>Consumption & other outputs</h3>${table(['Item', 'kg#'], [...r.cons.map(x => `<tr><td>Raw: <span class="mono">${x.batch}</span></td><td class="num">${kg(x.qty)}</td></tr>`), ...r.other.map(o => `<tr><td>${M.outputTypes.find(t => t.id === o.type).name}</td><td class="num">${kg(o.qty)}</td></tr>`)])}</div></div>
   ${r.lots ? `<h3>Finished lots</h3><div class="row">${r.lots.map(l => `<span class="pill brand mono" style="cursor:pointer" onclick="closeModal();App.go('trace','${l}')">${l}</span>`).join(' ')}</div>` : ''}
-  <div class="modal-foot">${r.status === 'Draft' ? B('Post run', `closeModal();postRunUI('${r.id}')`, 'primary') : ''}<button class="btn" onclick="closeModal()">Close</button></div>`);
+  <div class="modal-foot">${r.status === 'Posted' ? `<button class="btn" onclick="closeModal();App.go('costing','${r.id}')">$ View costing</button>` : ''}${r.status === 'Draft' ? B('Post run', `closeModal();postRunUI('${r.id}')`, 'primary') : ''}<button class="btn" onclick="closeModal()">Close</button></div>`);
 }
 
 V.grades = () => {
@@ -624,7 +625,7 @@ function orderDetail(id) {
   ${o.lines.map(l => { const res = E.lineReserved(l.id); const sug = E.suggest(l); const short = l.qty - res - sug.reduce((a, s) => a + s.take, 0); const pk = packKg(l.pack), full = Math.floor(l.qty / pk + 1e-9);
     const blocked = S.lots.filter(x => x.grade === l.grade && x.qc !== 'PASS');
     return `<div class="card" id="line-${l.id}"><h3><span class="mono">${l.id}</span> · ${l.grade} — ${gName(l.grade)} <span class="r">${pill(res >= l.qty - 1e-6 ? 'Reserved' : res > 0 ? 'Partly reserved' : 'Open')}</span></h3>
-    <div class="row small muted" style="margin-bottom:10px">Ordered <b>&nbsp;${kg(l.qty)}&nbsp;</b> · ${pkName(l.pack)} → ${full} full packs + ${(l.qty - full * pk).toFixed(3)} kg remainder · Reserved <b>&nbsp;${kg(res)}</b></div>
+    <div class="row small muted" style="margin-bottom:10px">Ordered <b>&nbsp;${kg(l.qty)}&nbsp;</b> · ${pkName(l.pack)} → ${full} full packs + ${(l.qty - full * pk).toFixed(3)} kg remainder · Reserved <b>&nbsp;${kg(res)}</b>${lineMargin(l)}</div>
     ${res < l.qty - 1e-6 && !['Packed', 'Dispatched'].includes(o.status) ? `<div class="sec">Suggested released lots — oldest first, user confirms</div>
     ${table(['Lot', 'Factory', 'Produced', 'QC', 'Available#', 'Suggest#', ''], sug.map(s => `<tr><td class="mono">${s.lot.id}</td><td>${s.lot.fac}</td><td>${fmtDate(s.lot.date)}</td><td>${pill('PASS')}</td><td class="num">${kg(s.b.available)}</td><td class="num"><b>${kg(s.take)}</b></td><td>${s.take > 0 ? B('Reserve', `act(()=>{E.reserve('${o.id}','${l.id}','${s.lot.id}',${s.take});toast('✓ Reserved ${kg(s.take)} from ${s.lot.id}','ok')})`, 'sm primary') : ''}</td></tr>`), 'No released stock for this grade')}
     ${short > 1e-6 ? `<div class="alert bad" style="margin-top:8px">⛔ Shortage of ${kg(short)} — insufficient quality-released stock</div>` : ''}
@@ -725,6 +726,8 @@ function csv(k) { const rows = REPORTS[k](); const t = rows.map(r => r.map(v => 
 V.settings = () => {
   const tab = App.sub.setTab || 'profile'; const P = M.profile;
   const T = {
+    rules: rulesHtml(),
+    appearance: appearanceHtml(),
     profile: `<div class="grid g2"><div><h3>Company profile <span class="r muted small">from public website</span></h3><dl class="facts"><dt>Established</dt><dd>${P.established}</dd><dt>Headquarters</dt><dd>${P.hq}</dd><dt>Operations</dt><dd>${P.operations}</dd><dt>Minimum order</dt><dd>${kg(P.moq)} per grade</dd><dt>Packaging</dt><dd>Flexi-pouch (CO₂ + N₂, partial vacuum) and vacuum-sealed tins</dd><dt>Quality spec</dt><dd>${P.specSource}</dd></dl>
       <h3 style="margin-top:18px">Capabilities</h3><div class="chipset">${P.capabilities.map(x => `<span class="chip">${x}</span>`).join('')}</div></div>
       <div><h3>Certifications</h3><div class="chipset">${P.certifications.map(x => `<span class="chip on">✓ ${x}</span>`).join('')}</div><p class="spec" style="margin-top:6px">Certificate numbers and expiry dates are not public — tracked here once provided.</p>
@@ -737,7 +740,139 @@ V.settings = () => {
     <div><h3>Suppliers</h3>${table(['Code', 'Name', 'Country'], M.suppliers.map(s => `<tr><td>${s.id}</td><td>${s.name}</td><td>${s.country}</td></tr>`))}</div><div><h3>Customers</h3>${table(['Code', 'Name', 'Country'], M.customers.map(s => `<tr><td>${s.id}</td><td>${s.name}</td><td>${s.country}</td></tr>`))}</div>
     <div><h3>Packaging</h3>${table(['Code', 'Name', 'Method'], M.packaging.map(p => `<tr><td>${p.id}</td><td>${p.name}</td><td class="small">${p.method}</td></tr>`))}</div><div><h3>Output categories</h3>${table(['Code', 'Name', 'Required for mass balance'], M.outputTypes.map(p => `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.required ? 'Yes' : 'No'}</td></tr>`))}</div></div>`,
   };
-  return `<div class="card"><div class="tabs">${[['profile', 'Company profile'], ['audit', 'Audit log'], ['roles', 'Roles & permissions'], ['masters', 'Master data']].map(([k, t]) => `<button class="${k === tab ? 'on' : ''}" onclick="App.sub.setTab='${k}';App.render()">${t}</button>`).join('')}</div>${T[tab]}</div>`;
+  return `<div class="card"><div class="tabs">${[['profile', 'Company profile'], ['rules', 'Business rules'], ['appearance', 'Appearance'], ['audit', 'Audit log'], ['roles', 'Roles & permissions'], ['masters', 'Master data']].map(([k, t]) => `<button class="${k === tab ? 'on' : ''}" onclick="App.sub.setTab='${k}';App.render()">${t}</button>`).join('')}</div>${T[tab]}</div>`;
+};
+
+
+/* ============================ COSTING, RULES, LEDGER, IMPORT, APPEARANCE ============================ */
+IC.costing = '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>';
+const usd = n => (n < 0 ? '−$' : '$') + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const kor = (kernel, input) => input > 0 ? kernel * 2.20462 / (input / 80) : null;
+const rule = id => M.rules.find(r => r.id === id);
+const batchPrice = id => { const b = S.batches.find(x => x.id === id); return b ? (b.price || M.costing.rcn[b.origin] || 1.45) : 0; };
+
+/* Joint-cost split: one raw-nut pool → graded outputs, each taking its share of cost (last line takes rounding) */
+E.cost = (run, meth = 'rsv', target = 15) => {
+  const input = run.cons.reduce((s, c) => s + (+c.qty || 0), 0);
+  const raw = run.cons.reduce((s, c) => s + (+c.qty || 0) * batchPrice(c.batch), 0);
+  const proc = input * (M.costing.labour + M.costing.overhead);
+  const shell = run.other.filter(o => o.type === 'SHELL').reduce((s, o) => s + (+o.qty || 0), 0);
+  const credit = shell * M.costing.shellCredit; const joint = raw + proc - credit;
+  const lines = run.outputs.filter(o => +o.qty > 0).map(o => ({grade: o.grade, qty: +o.qty, price: M.prices[o.grade] || 0})).map(l => ({...l, value: l.qty * l.price}));
+  const tv = lines.reduce((s, l) => s + l.value, 0), tq = lines.reduce((s, l) => s + l.qty, 0);
+  let acc = 0; const R6 = rule('R06');
+  lines.forEach((l, i) => {
+    l.share = meth === 'weight' ? l.qty / tq : (tv ? l.value / tv : 0);
+    l.cost = i === lines.length - 1 ? Math.round((joint - acc) * 100) / 100 : Math.round(joint * l.share * 100) / 100; acc += l.cost;
+    l.costKg = l.cost / l.qty; l.pl = l.value ? (l.value - l.cost) * 100 / l.value : null;
+    l.target = l.costKg * (100 + target) / 100; l.flag = l.pl != null && (l.pl < R6.lo || l.pl > R6.hi);
+  });
+  return {input, raw, proc, shell, credit, joint, lines, tv, tq, margin: tv ? (tv - joint) * 100 / tv : null, costKg: tq ? joint / tq : null, kor: kor(tq, input), allocated: acc};
+};
+const lotCostKg = lotId => { const l = S.lots.find(x => x.id === lotId); const r = l && S.runs.find(x => x.id === l.run); if (!r) return null; const ln = E.cost(r).lines.find(x => x.grade === l.grade); return ln ? ln.costKg : null; };
+function lineMargin(l) {
+  const price = M.prices[l.grade]; if (!price) return '';
+  const rs = S.reservations.filter(r => r.line === l.id && r.status !== 'Released');
+  let ck; if (rs.length) { const q = rs.reduce((s, r) => s + r.qty, 0); ck = rs.reduce((s, r) => s + r.qty * (lotCostKg(r.lot) || 0), 0) / q; }
+  else { const lots = S.lots.filter(x => x.grade === l.grade && x.qc === 'PASS').slice(-5); ck = lots.length ? lots.reduce((s, x) => s + (lotCostKg(x.id) || 0), 0) / lots.length : null; }
+  if (!ck) return '';
+  const m = (price - ck) * 100 / price;
+  return ` · Est. margin <b style="color:${m < 0 ? 'var(--bad-ink)' : 'var(--ok-ink)'}">&nbsp;${m.toFixed(1)}%</b> <span class="muted">(${usd(price)}/kg vs cost ${usd(ck)}/kg)</span>`;
+}
+
+/* Rule checks for draft runs (information only — same rules as the Rules panel) */
+E.checkRun = run => {
+  const out = []; const c = E.calc(run);
+  if (!(c.input > 0)) out.push('No raw input recorded');
+  const per = {}; run.cons.forEach(x => { if (x.batch) per[x.batch] = (per[x.batch] || 0) + (+x.qty || 0); });
+  if (run.status !== 'Posted') Object.entries(per).forEach(([b, q]) => { const av = E.allocAvail(run.fac, b); if (q > av + 1e-6) out.push(`${b}: ${kg(q)} exceeds ${fName(run.fac)} allocation of ${kg(av)} (R02)`); });
+  if (!c.kernel) out.push('No grade outputs recorded');
+  if (c.missing.length) out.push(`Missing output streams: ${c.missing.join(', ')} (R03)`);
+  if (c.input > 0 && c.complete && Math.abs(c.variance) / c.input * 100 > rule('R04').val) out.push(`Mass-balance variance ${(c.variance / c.input * 100).toFixed(2)}% is outside ± ${rule('R04').val}% (R04)`);
+  const hist = S.runs.filter(r => r.status === 'Posted' && r.fac === run.fac && r.id !== run.id).map(E.calc);
+  if (c.recovery != null && hist.length) { const i = hist.reduce((s, h) => s + h.input, 0), k = hist.reduce((s, h) => s + h.kernel, 0); const avg = k / i * 100; const dev = (c.recovery - avg) / avg * 100; if (Math.abs(dev) > rule('R05').val) out.push(`Recovery ${pct(c.recovery)} is ${dev > 0 ? '+' : ''}${dev.toFixed(0)}% vs ${fName(run.fac)} average ${pct(avg)} (R05)`); }
+  return out;
+};
+const checkPill = r => { const x = E.checkRun(r); return x.length ? `<span class="pill warn" title="${esc(x.join('\n'))}">⚠ Check</span>` : '<span class="pill ok">✓ Ready</span>'; };
+function checksHtml(run) {
+  const x = E.checkRun(run);
+  return x.length ? `<div class="alert warn" style="margin-top:8px"><span><b>⚠ ${x.length} rule check${x.length > 1 ? 's' : ''} to review</b><br>${x.map(esc).join('<br>')}</span></div>` : '<div class="alert ok" style="margin-top:8px"><span>✓ All rule checks pass — ready to post</span></div>';
+}
+function rulesHtml() {
+  return `<p class="muted small" style="margin-top:0">Business rules are configurable per company and read-only here. The same rules are checked on entry, on the lists and again before posting.</p>
+  ${table(['Rule', 'Description', 'Default', 'Checked in'], M.rules.map(r => `<tr><td class="mono"><b>${r.id}</b></td><td>${r.name}</td><td><span class="pill brand">${r.def}</span></td><td class="small">${r.where}</td></tr>`))}`;
+}
+function rulesModal() { modal(`<h2>ⓘ Business rules</h2>${rulesHtml()}<div class="modal-foot"><button class="btn" onclick="closeModal()">Close</button></div>`); }
+
+/* Raw batch running ledger: IN − OUT = balance on every date (never negative) */
+function batchLedger(id) {
+  const b = S.batches.find(x => x.id === id); const pr = batchPrice(id);
+  const mv = S.batchMoves.filter(m => m.batch === id).map(m => ({...m})).sort((x, y) => x.ts.localeCompare(y.ts));
+  let bal = 0, neg = false;
+  const rows = mv.map(m => { const inn = m.type === 'RECEIPT' ? m.qty : 0, out = m.type === 'ALLOCATE' ? m.qty : 0; bal += inn - out; if (bal < -1e-6) neg = true;
+    return `<tr><td>${fmtDate(m.ts)}</td><td>${m.type === 'RECEIPT' ? 'Goods receipt' : 'Transfer → ' + fName(m.fac)}</td><td class="mono">${m.ref}</td><td class="num">${inn ? kg(inn) : ''}</td><td class="num">${out ? kg(out) : ''}</td><td class="num"><b>${kg(bal)}</b></td><td class="num">${usd(bal * pr)}</td></tr>`; });
+  const cons = S.allocations.filter(a => a.batch === id);
+  modal(`<h2>Batch ledger — ${id}</h2><p class="muted">${M.suppliers.find(s => s.id === b.supplier).name} · ${b.origin} · ${usd(pr)} / kg landed</p>
+  <div class="grid g4">${kpi('Received', kg(b.original), usd(b.original * pr))}${kpi('Transferred', kg(E.batchBal(id).allocated))}${kpi('In store', kg(E.batchBal(id).unallocated), usd(E.batchBal(id).unallocated * pr))}${kpi('Consumed in runs', kg(E.batchBal(id).consumed))}</div>
+  <div class="sec">Store ledger · IN − OUT = balance</div>
+  ${table(['Date', 'Movement', 'Reference', 'In#', 'Out#', 'Balance#', 'Value#'], rows)}
+  <div class="alert ${neg ? 'bad' : 'ok'}" style="margin-top:8px"><span>${neg ? '⛔ Balance went negative on a date' : '✓ Balance never negative on any date — nothing transferred that the batch did not hold'}</span></div>
+  <div class="sec">Factory stock from this batch</div>
+  ${table(['Factory', 'Transferred#', 'Consumed#', 'Remaining#'], cons.map(a => `<tr><td>${fName(a.fac)}</td><td class="num">${kg(a.qty)}</td><td class="num">${kg(a.consumed)}</td><td class="num">${kg(a.qty - a.consumed)}</td></tr>`), 'Not transferred yet')}
+  <div class="modal-foot"><button class="btn" onclick="closeModal()">Close</button></div>`);
+}
+
+/* CSV import of grade outputs (nothing posts until the user saves) */
+function csvTemplate() { const t = 'grade,kg\nW-180,80\nW-210,120\nW-240,250\nW-320,450\nW-450,150\nSW-320,80\nS,70\nB,40\nLWP,50\nSWP,30\nBB,10\nSHELL,3480\nTESTA,115\nREJ,45\n'; const x = document.createElement('a'); x.href = URL.createObjectURL(new Blob([t], {type: 'text/csv'})); x.download = 'grade-output-template.csv'; x.click(); }
+function csvImport(inp) {
+  const f = inp.files[0]; if (!f) return; const rd = new FileReader();
+  rd.onload = () => {
+    const outs = [], oth = [], bad = [];
+    rd.result.split(/\r?\n/).forEach(line => { const [code, q] = line.split(/[,;\t]/).map(s => (s || '').trim()); if (!code || isNaN(parseFloat(q))) return;
+      const g = M.grades.find(x => x.id.toUpperCase() === code.toUpperCase() || x.id.replace('-', '') === code.toUpperCase().replace('-', ''));
+      const t = M.outputTypes.find(x => x.id === code.toUpperCase() || x.name.toUpperCase().startsWith(code.toUpperCase()));
+      if (g) outs.push({grade: g.id, qty: +q}); else if (t) oth.push({type: t.id, qty: +q}); else bad.push(code); });
+    if (outs.length) draft.outputs = outs; if (oth.length) draft.other = oth;
+    drawRunForm(); toast(`Imported ${outs.length} grade lines, ${oth.length} other streams${bad.length ? ' — unknown codes skipped: ' + bad.join(', ') : ''}`, bad.length ? 'warn' : 'ok');
+  };
+  rd.readAsText(f);
+}
+
+/* Appearance: accent colour themes */
+const ACCENTS = [['amber', '#d97706'], ['teal', '#0d9488'], ['indigo', '#4f46e5'], ['ocean', '#0284c7'], ['emerald', '#059669'], ['rose', '#e11d48'], ['slate', '#475569']];
+const Accent = { cur() { return document.documentElement.dataset.accent || 'amber'; }, set(a) { if (a === 'amber') delete document.documentElement.dataset.accent; else document.documentElement.dataset.accent = a; try { localStorage.setItem('ciq-accent', a); } catch (e) {} App.render(); } };
+function appearanceHtml() {
+  return `<div class="grid g2"><div><h3>Mode</h3><div class="chipset"><span class="chip ${Theme.cur() === 'light' ? 'on' : ''}" style="cursor:pointer" onclick="if(Theme.cur()!=='light')Theme.toggle();App.render()">☀ Light</span><span class="chip ${Theme.cur() === 'dark' ? 'on' : ''}" style="cursor:pointer" onclick="if(Theme.cur()!=='dark')Theme.toggle();App.render()">☾ Dark</span></div></div>
+  <div><h3>Accent colour</h3><div class="swatches">${ACCENTS.map(([k, c]) => `<button class="swatch ${Accent.cur() === k ? 'on' : ''}" style="--sw:${c}" onclick="Accent.set('${k}')"><i></i>${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div><p class="spec">Every colour in the app follows the selected accent, in light and dark mode.</p></div></div>`;
+}
+
+/* Costing & margin screen */
+V.costing = () => {
+  const posted = S.runs.filter(r => r.status === 'Posted' && facOk(r.fac));
+  if (!posted.length) return '<div class="card empty">No posted production runs yet</div>';
+  let sel = App.sub.costing; if (!posted.some(r => r.id === sel)) sel = (posted.find(r => r.id === 'PROD-DEMO-001') || posted[posted.length - 1]).id;
+  const meth = App.sub.costMeth || 'rsv', tm = App.sub.target ?? 15;
+  const run = S.runs.find(r => r.id === sel); const c = E.cost(run, meth, tm);
+  const all = posted.map(r => E.cost(r, meth, tm)); const J = all.reduce((s, x) => s + x.joint, 0), TV = all.reduce((s, x) => s + x.tv, 0), TQ = all.reduce((s, x) => s + x.tq, 0), TI = all.reduce((s, x) => s + x.input, 0);
+  const byG = {}; all.forEach(x => x.lines.forEach(l => { const g = byG[l.grade] = byG[l.grade] || {qty: 0, cost: 0, value: 0}; g.qty += l.qty; g.cost += l.cost; g.value += l.value; }));
+  const flagged = c.lines.filter(l => l.flag).length;
+  return `<div class="grid g4">${kpi('Joint cost (posted runs)', usd(J), posted.length + ' runs', '', 'costing')}${kpi('Kernel sales value', usd(TV), 'at price list')}${kpi('Gross margin', pct(TV ? (TV - J) * 100 / TV : null), 'value − cost ÷ value', '', 'percent')}${kpi('Avg kernel cost', usd(TQ ? J / TQ : 0) + '/kg', 'KOR ' + (kor(TQ, TI) || 0).toFixed(1) + ' lbs / 80 kg bag', '', 'scale')}</div>
+  <div class="card"><h3>Grade cost split <span class="r"><select class="sel-sm" onchange="App.go('costing',this.value)">${posted.slice().reverse().map(r => `<option ${r.id === sel ? 'selected' : ''}>${r.id}</option>`).join('')}</select></span></h3>
+    <div class="row" style="margin-bottom:12px"><div class="tabs" style="margin:0">${[['rsv', 'By sales value'], ['weight', 'By weight']].map(([k, t]) => `<button class="${k === meth ? 'on' : ''}" onclick="App.sub.costMeth='${k}';App.render()">${t}</button>`).join('')}</div>
+    <label style="display:flex;align-items:center;gap:6px">Target margin % <input type="number" value="${tm}" style="width:70px" onchange="App.sub.target=+this.value;App.render()"></label><span class="spacer"></span><button class="btn sm" onclick="rulesModal()">ⓘ Rules</button></div>
+    <div class="grid g4" style="margin-bottom:12px">${kpi('Raw nut', usd(c.raw), kg(c.input) + ' × landed price')}${kpi('Processing', usd(c.proc), usd(M.costing.labour + M.costing.overhead) + '/kg labour + overhead')}${kpi('Shell credit', '−' + usd(c.credit), kg(c.shell) + ' × ' + usd(M.costing.shellCredit))}${kpi('Joint cost to split', usd(c.joint), 'KOR ' + (c.kor || 0).toFixed(1) + ' · ' + usd(c.costKg) + '/kg kernel')}</div>
+    ${table(['Grade', 'Kernel#', 'Price / kg#', 'Sales value#', 'Share#', 'Cost amt#', 'Cost / kg#', 'P/L %#', 'Price @ target#'],
+      [`<tr class="total"><td>Total · ${c.lines.length} grades</td><td class="num">${kg(c.tq)}</td><td class="num">${usd(c.tv / c.tq)}</td><td class="num">${usd(c.tv)}</td><td class="num">100%</td><td class="num">${usd(c.allocated)}</td><td class="num">${usd(c.costKg)}</td><td class="num">${pct(c.margin)}</td><td class="num"></td></tr>`,
+       ...c.lines.map((l, i) => `<tr><td class="mono"><b>${l.grade}</b></td><td class="num">${kg(l.qty)}</td><td class="num">${usd(l.price)}</td><td class="num">${usd(l.value)}</td><td class="num">${(l.share * 100).toFixed(1)}%</td><td class="num">${usd(l.cost)}${i === c.lines.length - 1 ? ' <span class="muted small" title="Rounding difference goes to the last line (R07)">*</span>' : ''}</td><td class="num">${usd(l.costKg)}</td><td class="num"><span class="pill ${l.flag ? 'bad' : l.pl < 0 ? 'warn' : 'ok'}" ${l.flag ? 'title="Outside the −20% to +40% range (R06)"' : ''}>${pct(l.pl)}</span></td><td class="num">${usd(l.target)}</td></tr>`)])}
+    <div class="row" style="margin-top:10px"><span class="pill ${Math.abs(c.allocated - c.joint) < 0.005 ? 'ok' : 'bad'}">Split cost ${usd(c.allocated)} = joint cost ${usd(c.joint)}</span>${flagged ? `<span class="pill bad">${flagged} grade(s) outside P/L range</span>` : ''}</div>
+    <div class="formula" style="margin-top:10px">${meth === 'rsv' ? 'Share = grade sales value ÷ total sales value — every grade earns the same margin; best for valuing stock' : 'Share = grade kg ÷ total kernel kg — shows which grades really make or lose money'} · Cost/kg = cost amt ÷ kg · P/L % = (value − cost) × 100 ÷ value · Price @ target = cost/kg × (100 + target%) ÷ 100 · * last line takes rounding</div></div>
+  <div class="grid g2">
+    <div class="card"><h3>Grade profitability — all posted runs</h3>${table(['Grade', 'Kernel#', 'Cost / kg#', 'Price / kg#', 'Margin#'], Object.entries(byG).sort((x, y) => y[1].value - x[1].value).map(([g, x]) => { const m = (x.value - x.cost) * 100 / x.value; return `<tr><td class="mono"><b>${g}</b></td><td class="num">${kg(Math.round(x.qty))}</td><td class="num">${usd(x.cost / x.qty)}</td><td class="num">${usd(M.prices[g] || 0)}</td><td class="num"><span class="pill ${m < 0 ? 'bad' : m < 10 ? 'warn' : 'ok'}">${pct(m)}</span></td></tr>`; }))}</div>
+    <div class="card"><h3>Price list & cost inputs <span class="r muted small">illustrative — edit to try</span></h3>
+      <div class="sec" style="margin-top:0">Kernel price per kg (FOB)</div><div class="pricegrid">${M.grades.map(g => `<label>${g.id}<input type="number" step="0.1" value="${M.prices[g.id] || 0}" onchange="M.prices['${g.id}']=+this.value;App.render()"></label>`).join('')}</div>
+      <div class="sec">Raw nut landed price per kg</div><div class="pricegrid">${Object.keys(M.costing.rcn).map(o => `<label>${o}<input type="number" step="0.01" value="${M.costing.rcn[o]}" onchange="M.costing.rcn['${o}']=+this.value;S.batches.filter(b=>b.origin==='${o}').forEach(b=>b.price=+this.value);App.render()"></label>`).join('')}</div>
+      <div class="sec">Processing & by-product</div><div class="pricegrid"><label>Labour / kg<input type="number" step="0.01" value="${M.costing.labour}" onchange="M.costing.labour=+this.value;App.render()"></label><label>Overhead / kg<input type="number" step="0.01" value="${M.costing.overhead}" onchange="M.costing.overhead=+this.value;App.render()"></label><label>Shell credit / kg<input type="number" step="0.01" value="${M.costing.shellCredit}" onchange="M.costing.shellCredit=+this.value;App.render()"></label></div></div>
+  </div>`;
 };
 
 /* ============================ GUIDED TOUR ============================ */
@@ -755,7 +890,8 @@ const Tour = {
     {r: 'packing', t: '8 · Packing', p: 'Packing Centre 01 records 26 full 25 lb pouches plus a 5.165 kg remainder pack — never silently rounded to 27.', do: () => { if (!S.packings.find(p => p.order === 'ORD-DEMO-001')) { E.pack('ORD-DEMO-001', 'PC01', 'Packing crew A'); toast('✓ Packing recorded', 'ok'); } }},
     {r: 'dispatch', t: '9 · Dispatch', p: 'Dispatch links packing records to a container and document checklist; stock is deducted exactly once. A second posting attempt is rejected.', do: () => { if (!S.dispatches.find(d => d.order === 'ORD-DEMO-001')) E.dispatch('ORD-DEMO-001', {container: 'DEMO-CONT-9001', forwarder: 'Demo Freight Ltd', vessel: 'MV Demo Horizon', checklist: {inv: true, pl: true, coo: true, phyto: true, bl: true, qc: true}}); try { E.dispatch('ORD-DEMO-001', {}); } catch (e) { toast('⛔ ' + e.message, 'bad'); } }},
     {r: 'trace', t: '10 · Traceability', p: 'From the finished W-320 lot back to the production run, raw batch and supplier shipment — and forward to the customer order and container.', do: () => { App.sub.trace = 'FG-DEMO-001-W320'; }},
-    {r: 'reports', t: '11 · Reports & reconciliation', p: 'Factory, grade, mass-balance, quality, stock and fulfilment reports — all reconcile with the ledger and export to CSV. End-to-end journey complete.', do: () => {}}
+    {r: 'costing', t: '11 · Grade costing & margin', p: 'The raw nut, processing cost and shell credit of PROD-DEMO-001 are shared across its 11 grades — by sales value or by weight — so every finished lot carries a cost per kg and a margin. KOR shows outturn in trade terms.', do: () => { App.sub.costing = 'PROD-DEMO-001'; }},
+    {r: 'reports', t: '12 · Reports & reconciliation', p: 'Factory, grade, mass-balance, quality, stock and fulfilment reports — all reconcile with the ledger and export to CSV. End-to-end journey complete.', do: () => {}}
   ],
   start() { Tour.i = 0; Tour.show(); },
   show() {

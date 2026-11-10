@@ -74,3 +74,24 @@ MASTER.profile = {
   capabilities:['Own processing','In-house quality analysis','Pre-shipment quality inspection','Process & procedure optimisation','After-sales support'],
   specSource:'Published "Cashew Kernels Specification" PDF (2014)'
 };
+
+// Illustrative costing inputs (USD) — editable in the Costing screen; replace with client figures in discovery
+MASTER.costing = {
+  rcn:{'Ivory Coast':1.38,'Ghana':1.42,'Tanzania':1.55,'Benin':1.36,'Guinea-Bissau':1.47,'Indonesia':1.52}, // raw nut price per kg landed
+  labour:0.18, overhead:0.09,   // processing cost per kg of raw nut input
+  shellCredit:0.10              // by-product credit per kg shell (sold for CNSL / fuel)
+};
+MASTER.prices = {'W-180':10.6,'W-210':9.7,'W-240':8.7,'W-320':7.8,'W-450':7.2,'SW-210':7.4,'SW-240':7.0,'SW-320':6.7,'SW-450':6.3,
+  'S':6.1,'B':5.6,'LWP':5.4,'SWP':4.4,'BB':3.1,'SSP':3.5,'SSW':5.3,'SS':5.0,'SB':4.6,'SPS':3.2}; // illustrative FOB price per kg
+MASTER.rules = [
+  {id:'R01',name:'Allocation cannot exceed unallocated batch stock',def:'On',where:'Raw batches → Allocate'},
+  {id:'R02',name:'Run consumption cannot exceed the factory allocation',def:'On',where:'Production → Post'},
+  {id:'R03',name:'Required output streams recorded (shell, testa)',def:'On',where:'Production → Check'},
+  {id:'R04',name:'Mass-balance variance tolerance',def:'± 2% of raw input',where:'Production → Check',val:2},
+  {id:'R05',name:'Recovery deviation vs factory average',def:'± 15%',where:'Production → Check, Dashboard alerts',val:15},
+  {id:'R06',name:'Grade margin (P/L %) range',def:'−20% to +40%',where:'Costing',lo:-20,hi:40},
+  {id:'R07',name:'Costing rounding goes to the last grade line',def:'On',where:'Costing'},
+  {id:'R08',name:'Only quality-released (PASS) stock can be reserved',def:'On',where:'Orders → Reserve'},
+  {id:'R09',name:'Reservation ≤ lot available and ≤ order line',def:'On',where:'Orders → Reserve'},
+  {id:'R10',name:'Dispatch deducts stock exactly once',def:'On',where:'Dispatch'},
+  {id:'R11',name:'Orders below the published MOQ are flagged',def:'15,000 kg per grade',where:'Orders'}];
